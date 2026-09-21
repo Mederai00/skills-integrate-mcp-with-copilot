@@ -8,6 +8,11 @@
   </head>
   <body>
     <header>
+      <div class="auth-controls">
+        <button id="login-button" class="user-button" type="button" aria-label="Teacher login">&#128100;</button>
+        <span id="login-status" class="login-status">Student view</span>
+        <button id="logout-button" class="hidden" type="button">Log out</button>
+      </div>
       <h1>Mergington High School</h1>
       <h2>Extracurricular Activities</h2>
     </header>
@@ -22,7 +27,8 @@
       </section>
 
       <section id="signup-container">
-        <h3>Sign Up for an Activity</h3>
+        <div id="teacher-panel" class="hidden">
+          <h3>Register a Student</h3>
         <form id="signup-form">
           <div class="form-group">
             <label for="email">Student Email:</label>
@@ -37,9 +43,24 @@
           </div>
           <button type="submit">Sign Up</button>
         </form>
+        </div>
+        <p id="teacher-message">Log in as a teacher to register or unregister students.</p>
         <div id="message" class="hidden"></div>
       </section>
     </main>
+
+    <div id="login-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <form id="login-form" class="login-form">
+        <button id="close-login" class="close-button" type="button" aria-label="Close login">&times;</button>
+        <h3 id="login-title">Teacher Login</h3>
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required />
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button type="submit">Log in</button>
+        <p id="login-error" class="error hidden"></p>
+      </form>
+    </div>
 
     <footer>
       <p>&copy; 2026 Mergington High School</p>
