@@ -3,6 +3,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const loginButton = document.getElementById("login-button");
+  const logoutButton = document.getElementById("logout-button");
+  const loginStatus = document.getElementById("login-status");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  const teacherPanel = document.getElementById("teacher-panel");
+  const teacherMessage = document.getElementById("teacher-message");
+  let authToken = sessionStorage.getItem("teacherToken");
+
+  function authHeaders() {
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+  }
+
+  function updateAuthView() {
+    const loggedIn = Boolean(authToken);
+    teacherPanel.classList.toggle("hidden", !loggedIn);
+    teacherMessage.classList.toggle("hidden", loggedIn);
+    loginButton.classList.toggle("hidden", loggedIn);
+    logoutButton.classList.toggle("hidden", !loggedIn);
+    loginStatus.textContent = loggedIn ? "Teacher mode" : "Student view";
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -21,17 +43,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const spotsLeft =
           details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
               <h5>Participants:</h5>
               <ul class="participants-list">
                 ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
-                  )
+                  .map((email) => `<li><span class="participant-email">${email}</span>${authToken ? `<button class="delete-btn" data-activity="${name}" data-email="${email}" aria-label="Unregister ${email}">&#10005;</button>` : ""}</li>`)
                   .join("")}
               </ul>
             </div>`
@@ -56,7 +74,6 @@ document.addEventListener("DOMContentLoaded", () => {
         activitySelect.appendChild(option);
       });
 
-      // Add event listeners to delete buttons
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
@@ -80,6 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: authHeaders(),
         }
       );
 
@@ -124,6 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: authHeaders(),
         }
       );
 
@@ -155,6 +174,51 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  loginButton.addEventListener("click", () => {
+    loginModal.classList.remove("hidden");
+    document.getElementById("username").focus();
+  });
+
+  document.getElementById("close-login").addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+  });
+
+  logoutButton.addEventListener("click", () => {
+    authToken = null;
+    sessionStorage.removeItem("teacherToken");
+    updateAuthView();
+    fetchActivities();
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    loginError.classList.add("hidden");
+
+    const response = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+
+    if (!response.ok) {
+      loginError.textContent = "Invalid teacher credentials.";
+      loginError.classList.remove("hidden");
+      return;
+    }
+
+    const result = await response.json();
+    authToken = result.token;
+    sessionStorage.setItem("teacherToken", authToken);
+    loginForm.reset();
+    loginModal.classList.add("hidden");
+    updateAuthView();
+    fetchActivities();
+  });
+
   // Initialize app
+  updateAuthView();
   fetchActivities();
 });

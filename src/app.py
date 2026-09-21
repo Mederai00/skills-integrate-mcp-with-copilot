@@ -5,9 +5,17 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+import hashlib
+import hmac
+import json
+import secrets
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 import os
 from pathlib import Path
 
@@ -18,6 +26,34 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+security = HTTPBearer(auto_error=False)
+with open(current_dir / "teachers.json", encoding="utf-8") as teachers_file:
+    teachers = json.load(teachers_file)
+active_sessions = {}
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+def require_teacher(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)]
+):
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Teacher login required",
+        )
+
+    username = active_sessions.get(credentials.credentials)
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Teacher session expired",
+        )
+    return username
 
 # In-memory activity database
 activities = {
@@ -88,8 +124,38 @@ def get_activities():
     return activities
 
 
+@app.post("/auth/login")
+def login(request: LoginRequest):
+    teacher = teachers.get(request.username)
+    if teacher is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid teacher credentials",
+        )
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        request.password.encode(),
+        teacher["salt"].encode(),
+        teacher["iterations"],
+    ).hex()
+    if not hmac.compare_digest(password_hash, teacher["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid teacher credentials",
+        )
+
+    token = secrets.token_urlsafe(32)
+    active_sessions[token] = request.username
+    return {"token": token, "username": request.username}
+
+
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
+def signup_for_activity(
+    activity_name: str,
+    email: str,
+    teacher: Annotated[str, Depends(require_teacher)],
+):
     """Sign up a student for an activity"""
     # Validate activity exists
     if activity_name not in activities:
@@ -111,7 +177,11 @@ def signup_for_activity(activity_name: str, email: str):
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
+def unregister_from_activity(
+    activity_name: str,
+    email: str,
+    teacher: Annotated[str, Depends(require_teacher)],
+):
     """Unregister a student from an activity"""
     # Validate activity exists
     if activity_name not in activities:
